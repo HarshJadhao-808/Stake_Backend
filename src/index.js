@@ -2,6 +2,7 @@ import express from "express";
 import dotenv from "dotenv";
 import userRouter from "./Router/Userrouter.js";
 import dbconnect from "./Config/db.js";
+import adminRouter from "./Router/Adminrouter.js";
 
 dotenv.config()
 const app = express()
@@ -10,6 +11,8 @@ app.use(express.json())
 dbconnect(process.env.mongo_url);
 
 app.use("/user",userRouter)
+
+app.use("/admin",adminRouter)
 
 app.get("/",(req,res)=>{
     res.send("It is working")

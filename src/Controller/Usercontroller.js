@@ -27,12 +27,29 @@ export const Signup = async(req,res) => {
 		});
 
 
-		res.json({ message: "User created ", user });
+		res.json({ message: "Account Created Succesfully ! ", user,Wallet_status:"1000 HC added to wallet" });
     } catch (error) {
         res.status(500).json({message:error.message})
     }
 }
 
+const ApplyInterest =  (user) => {
+   if(!user.stake || !user.lastStakeUpdate) return;
+
+   const now = new Date()
+   const last = new Date(user.lastStakeUpdate)
+
+   const diff = now - last
+   const time = 10 * 60 * 1000
+   const intervals = Math.floor(diff/time)
+   
+    if(intervals <= 0) return ;
+
+   const total_interest = user.stake * 0.01 * intervals
+   user.AvailableClaim += total_interest
+
+   lastStakeUpdate = new Date(last.getTime() + time * intervals)
+}
 
 export const Login = async (req,res) => {
     try {
@@ -43,6 +60,7 @@ export const Login = async (req,res) => {
 		if (!userexist) return res.status(400).send("Invalid credentials");
 
 		const ismatch = bcrypt.compare(password, userexist.password);
+         
 
 		if (!ismatch) return res.status(400).send("invalid credentials");
 
@@ -59,8 +77,78 @@ export const Login = async (req,res) => {
 			{ expiresIn: "3h" } 
 		);
 
-		res.json({ message: "Login successful", token });
+        ApplyInterest(userexist)
+
+		res.json({ message: "Login successful !", token });
     } catch (error) {
         res.status(500).json({message:error.message})
     }
 }
+
+
+export const StakeHC = async(req,res) => {
+    try {
+        const {stake} = req.body
+
+        const userexist = await User.findById(req.params.id)
+
+        if(!userexist) return res.status(400).send("Action not Possible");
+
+        userexist.stake += stake
+        userexist.wallet = userexist.wallet - stake
+        let last = userexist.lastStakeUpdated
+        if(!last) userexist.lastStakeUpdated = new Date() ;
+
+        ApplyInterest(userexist)
+
+        
+       await userexist.save()
+
+       res.status(200).json({message:"Stake placed Successful",userexist})
+
+    } catch (error) {
+        res.status(500).json({message:error.message})
+    }
+}
+
+export const rewardClaim = async (req,res) => {
+    try {
+       
+        const userexist = await User.findById(req.params.id)
+
+        if(!userexist) return res.status(400).send("Action not Possible");
+
+        const claimed = userexist.AvailableClaim;
+        userexist.wallet += userexist.AvailableClaim;
+        userexist.TotalClaimed += userexist.AvailableClaim;
+        userexist.AvailableClaim = 0;
+        await userexist.save()
+
+        res.status(200).json({message:`${claimed} HC deposited to Wallet`})
+
+    } catch (error) {
+        res.status(500).json({message:error.message})
+    }
+}
+
+export const Withdraw = async (req,res) => {
+    try {
+        const {stake} = req.body
+          
+        const userexist = await User.findById(req.params.id)
+
+        if(!userexist) return res.status(400).send("Action not Possible");
+
+        userexist.stake = userexist.stake - stake
+
+        userexist.wallet += stake 
+        
+       await  userexist.save()
+
+       res.status(200).json({message:`${stake} added to wallet`},userexist)
+
+    } catch (error) {
+        res.status(500).json({message:error.message})
+    }
+}
+
