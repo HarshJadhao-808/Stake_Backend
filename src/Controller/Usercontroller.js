@@ -9,9 +9,7 @@ export const Signup = async(req,res) => {
 
 		const exist_user = await User.findOne({ email });
 
-		if (exist_user) {
-			res.status(400).json({ message: "User already exists", exist_user });
-		}
+		if (exist_user) return res.status(400).json({ message: "User already exists", exist_user });
 
 
 		const hashed_pass = await bcrypt.hash(password, 10);
@@ -27,31 +25,36 @@ export const Signup = async(req,res) => {
 		});
 
 
-		res.json({ message: "Account Created Succesfully ! ", user,Wallet_status:"1000 HC added to wallet" });
+		res.json({ message: "Account Created Successfully ! ", user,Wallet_status:"1000 HC added to wallet" });
     } catch (error) {
         res.status(500).json({message:error.message})
     }
 }
 
 const ApplyInterest =  (user) => {
-   if(!user.stake || !user.lastStakeUpdate) return;
+   if(!user.stake || !user.lastStakeUpdated){ 
+    if(!user.stake) return `Stake not added` 
+    if(!user.lastStakeUpdated) return "interval not completed"
+} 
 
    const now = new Date()
-   const last = new Date(user.lastStakeUpdate)
+   const last = new Date(user.lastStakeUpdated)
 
    const diff = now - last
    const time = 10 * 60 * 1000
    const intervals = Math.floor(diff/time)
    
-    if(intervals <= 0) return ;
+    if(intervals <= 0) return `interval not completed` ;
 
    const total_interest = user.stake * 0.01 * intervals
    user.AvailableClaim += total_interest
 
-   lastStakeUpdate = new Date(last.getTime() + time * intervals)
+   user.lastStakeUpdated = new Date(last.getTime() + time * intervals)
+
+   return `${total_interest} Added to AvailableClaim`
 }
 
-export const Login = async (req,res) => {
+export const Login = async(req,res) => {
     try {
         const { password, email } = req.body;
 
@@ -63,7 +66,9 @@ export const Login = async (req,res) => {
          
 
 		if (!ismatch) return res.status(400).send("invalid credentials");
-
+        
+        const status = ApplyInterest(userexist)
+        await userexist.save()
 		const token = jwt.sign(
 			{
 				name: userexist.name,
@@ -77,9 +82,8 @@ export const Login = async (req,res) => {
 			{ expiresIn: "3h" } 
 		);
 
-        ApplyInterest(userexist)
 
-		res.json({ message: "Login successful !", token });
+		res.json({ message: "Login successful !", status , token});
     } catch (error) {
         res.status(500).json({message:error.message})
     }
@@ -96,15 +100,15 @@ export const StakeHC = async(req,res) => {
 
         userexist.stake += stake
         userexist.wallet = userexist.wallet - stake
-        let last = userexist.lastStakeUpdated
-        if(!last) userexist.lastStakeUpdated = new Date() ;
 
-        ApplyInterest(userexist)
+        if(userexist.lastStakeUpdated) userexist.lastStakeUpdated = new Date() ;
+
+       const status =  ApplyInterest(userexist)
 
         
        await userexist.save()
 
-       res.status(200).json({message:"Stake placed Successful",userexist})
+       res.status(200).json({message:"Stake placed Successful",userexist,status})
 
     } catch (error) {
         res.status(500).json({message:error.message})
@@ -145,7 +149,7 @@ export const Withdraw = async (req,res) => {
         
        await  userexist.save()
 
-       res.status(200).json({message:`${stake} added to wallet`},userexist)
+       res.status(200).json({message:`${stake} added to wallet`,userexist})
 
     } catch (error) {
         res.status(500).json({message:error.message})
